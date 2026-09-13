@@ -1,0 +1,37 @@
+From: CHIP Builder <chip@localhost>
+Subject: [PATCH] sunxi: default composite console to NTSC with 40x20 overscan
+
+This build keeps no saved environment (CONFIG_ENV_IS_NOWHERE) and video-mode
+is read at video init, before any boot script runs, so a boot.scr setenv can
+never reach it and u-boot always fell back to PAL 720x576i / 32x20. Put the
+mode in the default environment instead: NTSC 720x480i with 40x20 overscan,
+matching the kernel's sun4i_tv.overscan_x/_y in x-chip-os. Only built with
+CONFIG_VIDEO_COMPOSITE.
+
+--- a/include/configs/sunxi-common.h	2026-09-12 23:17:33.571304714 -0500
++++ b/include/configs/sunxi-common.h	2026-09-12 23:18:41.568902095 -0500
+@@ -384,8 +384,24 @@
+ #define FDTFILE CONFIG_DEFAULT_DEVICE_TREE ".dtb"
+ #endif
+ 
++/*
++ * CHIP: this build keeps no saved environment (CONFIG_ENV_IS_NOWHERE), and
++ * video-mode is read at video init, before any boot script runs, so the
++ * composite standard and overscan have to live in the default environment.
++ * NTSC with 40x20 overscan matches sun4i_tv.overscan_x/_y in x-chip-os's
++ * boot.scr. The 640x480 only satisfies the generic mode-table parser;
++ * composite always uses its own fixed 720x480i timing.
++ */
++#ifdef CONFIG_VIDEO_COMPOSITE
++#define SUNXI_VIDEO_MODE_DEFAULT \
++	"video-mode=sunxi:640x480-24@60,monitor=composite-ntsc,overscan_x=40,overscan_y=20\0"
++#else
++#define SUNXI_VIDEO_MODE_DEFAULT
++#endif
++
+ #define CONFIG_EXTRA_ENV_SETTINGS \
+ 	CONSOLE_ENV_SETTINGS \
++	SUNXI_VIDEO_MODE_DEFAULT \
+ 	MEM_LAYOUT_ENV_SETTINGS \
+ 	MEM_LAYOUT_ENV_EXTRA_SETTINGS \
+ 	DFU_ALT_INFO_RAM \

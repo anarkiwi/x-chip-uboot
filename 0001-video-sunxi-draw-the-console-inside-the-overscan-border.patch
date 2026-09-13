@@ -1,0 +1,63 @@
+From: CHIP Builder <chip@localhost>
+Subject: [PATCH] video: sunxi: draw the console inside the overscan border
+
+With overscan the driver starts the display's DMA overscan_offset bytes before
+a shifted framebuffer origin, but the video uclass maps the console at
+plat->base, which the driver never moved. The console therefore drew
+overscan_offset bytes before where the display reads -- about 928 px for the
+default 32x20 -- so the picture started most of the way across the screen and
+wrapped back to the left. Point plat->base at the shifted origin, make the
+console window 2*overscan smaller with full-width rows (line_length), and
+blank the whole scanned-out area so the overscan is a black border. Also
+bound the overscan values from the environment.
+
+--- a/drivers/video/sunxi/sunxi_display.c	2026-09-12 23:17:33.572850159 -0500
++++ b/drivers/video/sunxi/sunxi_display.c	2026-09-12 23:20:25.319207141 -0500
+@@ -1202,6 +1202,10 @@
+ 	if (overscan_y == -1)
+ 		overscan_y = sunxi_is_composite(sunxi_display->monitor) ? 20 : 0;
+ 
++	/* Nonsense values from the environment: fall back to none. */
++	if (2 * overscan_x >= mode->xres || 2 * overscan_y >= mode->yres)
++		overscan_x = overscan_y = 0;
++
+ 	sunxi_display->fb_size = plat->size;
+ 	overscan_offset = (overscan_y * mode->xres + overscan_x) * 4;
+ 	/* We want to keep the fb_base for simplefb page aligned, where as
+@@ -1227,15 +1231,32 @@
+ 	if (overscan_offset) {
+ 		fb_dma_addr += 0x1000 - (overscan_offset & 0xfff);
+ 		sunxi_display->fb_addr += ALIGN(overscan_offset, 0x1000);
+-		memset((void *)sunxi_display->fb_addr, 0, sunxi_display->fb_size);
+-		flush_cache(sunxi_display->fb_addr, sunxi_display->fb_size);
++		/*
++		 * Blank everything the display scans out, borders included: it
++		 * starts overscan_offset bytes before the console origin.
++		 */
++		memset((void *)plat->base, 0,
++		       ALIGN(overscan_offset, 0x1000) + mode->xres * mode->yres * 4);
++		flush_cache(plat->base,
++			    ALIGN(overscan_offset, 0x1000) + mode->xres * mode->yres * 4);
++		/*
++		 * The video uclass maps the console at plat->base. Point it at
++		 * the shifted origin -- otherwise the console draws
++		 * overscan_offset bytes before where the display starts reading,
++		 * so the picture lands most of the way across the screen and
++		 * wraps back to the left edge.
++		 */
++		plat->base = sunxi_display->fb_addr;
++		plat->size -= ALIGN(overscan_offset, 0x1000);
+ 	}
+ 	sunxi_mode_set(sunxi_display, mode, fb_dma_addr);
+ 
+ 	/* The members of struct video_priv to be set by the driver. */
+ 	uc_priv->bpix = VIDEO_BPP32;
+-	uc_priv->xsize = mode->xres;
+-	uc_priv->ysize = mode->yres;
++	uc_priv->xsize = mode->xres - 2 * overscan_x;
++	uc_priv->ysize = mode->yres - 2 * overscan_y;
++	/* Full-width rows: the console window sits inside the overscan border. */
++	uc_priv->line_length = mode->xres * VNBYTES(VIDEO_BPP32);
+ 
+ 	video_set_flush_dcache(dev, true);
+ 

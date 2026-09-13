@@ -18,6 +18,11 @@ git apply "${HERE}/0001-sunxi-nand-Undo-removal-of-DMA-specific-code-that-br.pat
 # w1 read: optional dest address, so the NAND boot script can read a DIP's
 # DS24xx ID EEPROM into RAM and pick a DT overlay
 git apply "${HERE}/0001-cmd-w1-read-add-optional-dest-address.patch"
+# composite console: NTSC + 40x20 overscan in the default env (this build has
+# no saved env), and draw the console inside that overscan border instead of
+# shifted and wrapped
+git apply "${HERE}/0001-sunxi-default-video-mode-composite-ntsc.patch"
+git apply "${HERE}/0001-video-sunxi-draw-the-console-inside-the-overscan-border.patch"
 
 # append nand configs to CHIP_defconfig before invoking it
 cat "${HERE}/nand.cfg" >> configs/CHIP_defconfig
